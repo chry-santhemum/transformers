@@ -2273,7 +2273,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             init.normal_(module.weight, mean=0.0, std=std)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
+                # If deepspeed is enabled, the module weight data is not stored, so we need to all gather first
+                if is_deepspeed_zero3_enabled():
+                    import deepspeed
+                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
+                        init.zeros_(module.weight[module.padding_idx])
+                else:
+                    init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
