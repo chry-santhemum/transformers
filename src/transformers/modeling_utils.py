@@ -2276,6 +2276,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # If deepspeed is enabled, the module weight data is not stored, so we need to all gather first
                 if is_deepspeed_zero3_enabled():
                     import deepspeed
+
                     with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
                         init.zeros_(module.weight[module.padding_idx])
                 else:
