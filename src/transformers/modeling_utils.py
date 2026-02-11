@@ -2271,9 +2271,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it loses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 # If deepspeed is enabled, the module weight data is not stored, so we need to all gather first
+                # This should not be needed after PR #43847, since _init_weights will just be skipped.
                 if is_deepspeed_zero3_enabled():
                     import deepspeed
 
