@@ -390,7 +390,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             # Embedding padding_idx row should be zeroed
             self.assertTrue(torch.allclose(padding_row, torch.zeros_like(padding_row)))
 
-            # Weights should have std=config.initializer_range=0.02, 
+            # Weights should have std=config.initializer_range=0.02,
             # not the _init_weights default of std ≈ 0.5
             self.assertAlmostEqual(embedding.weight.std().item(), std, delta=std)
             self.assertAlmostEqual(linear.weight.std().item(), std, delta=std)
