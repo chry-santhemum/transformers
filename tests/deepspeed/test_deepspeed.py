@@ -350,6 +350,51 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             torch.allclose(model.new_head.bias, torch.tensor(+100.0, device=model.new_head.bias.device)),
         )
 
+    def test_from_config_zero3_correctness(self):
+        # test that from_config() correctly initializes weights under ZeRO-3:
+        #     embedding padding_idx row is zeroed and do not crash here (see #43638)
+        #     all weights use the model's intended init, not PyTorch defaults (see #43844 / PR #43847)
+        import deepspeed
+        import torch
+
+        from transformers import AutoConfig, AutoModelForSequenceClassification
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-BertModel")
+                    model = AutoModelForSequenceClassification.from_config(config)
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+        std = config.initializer_range  # 0.02
+
+        embedding = model.bert.embeddings.word_embeddings
+        linear = model.bert.encoder.layer[0].attention.self.query
+
+        with deepspeed.zero.GatheredParameters(list(model.parameters()), modifier_rank=None):
+            padding_row = embedding.weight[embedding.padding_idx]
+
+            # Embedding padding_idx row should be zeroed
+            self.assertTrue(torch.allclose(padding_row, torch.zeros_like(padding_row)))
+
+            # Weights should have std=config.initializer_range=0.02, 
+            # not the _init_weights default of std ≈ 0.5
+            self.assertAlmostEqual(embedding.weight.std().item(), std, delta=std)
+            self.assertAlmostEqual(linear.weight.std().item(), std, delta=std)
+
     def test_arange_bf16(self):
         # Tests that configuring DeepSpeed with 16 bits does not cause float `torch.arange()` tensors to be cast down.
         # NOTE -- this assumes that the function calls have the following downcast-preventing pattern, i.e.
